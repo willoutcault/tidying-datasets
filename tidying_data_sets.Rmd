@@ -1,0 +1,304 @@
+---
+title: "Finding Correlations from Untidy Data Sets"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+---
+
+
+
+
+
+
+
+
+```{r loadlib, echo=T, results='hide', message=F, warning=F}
+require(tidyr)
+require(dplyr)
+require(ggplot2)
+require(stringr)
+require(usmap)
+```
+
+
+
+
+
+
+# Data Set 1: Stock Market
+
+
+
+I chose this data set because of it's relevance to finance and the considerable amount of variables included in the set. I want to look for high valued stocks so I can disburse my money into stable shares that have promising returns.
+
+
+
+```{r}
+stock_raw <- read.csv("https://raw.githubusercontent.com/wco1216/Data-607/master/Stock_Market_data.csv", TRUE, ",")
+```
+
+
+
+
+
+
+## Data Tidying
+
+
+
+Tidying required filtering, mutating, selecting and arranging. Tidying this data resulted in a data set that sold above an average price of $4,000 per share, also so that yearly change was less than 5% so that we knew these shares were relatively stable. The data set was arranged so that the highest percent change is on top and lowest is on bottom. Also each stock was assigned a type depending on whether the change was positive or negative. This was neceassary for the analysis.
+
+
+
+```{r}
+stock <- stock_raw %>%
+  filter(High.Price != "#N/A" & Low.Price != "#N/A") %>%
+  mutate(Average = (as.numeric(as.character(High.Price))+as.numeric(as.character(Low.Price)))/2) %>%
+  select(Share, Category, Sector, Last.Traded.Price, Percentage.Change, Average) %>%
+  filter(as.numeric(as.character(Average)) > 4000 & 
+         as.numeric(as.character(Percentage.Change)) < 5 &
+         as.numeric(as.character(Percentage.Change))) %>%
+  arrange(desc(Percentage.Change))
+stock$Change_Type <- ifelse(as.numeric(as.character(stock$Percentage.Change)) < 0, "below", "above")
+stock$Share <- factor(stock$Share, levels = stock$Share)
+stock$Percentage.Change <- as.numeric(as.character(stock$Percentage.Change))
+```
+
+
+
+
+
+
+## Analysis
+
+
+
+A list of high valued shares with consistant performance was graphed on a diverging bar graph. The graph is centered around 0% change in one year's time. 
+
+
+
+```{r}
+ggplot(stock, aes(x=reorder(Share, Percentage.Change),
+                  y=Percentage.Change, label=Percentage.Change)) +
+  geom_bar(stat='identity', aes(fill=stock$Change_Type), width=.5)  +
+  scale_fill_manual(name="Stock Exchange", 
+                    labels = c("Above Average", "Below Average"), 
+                    values = c("above"="#00ba38", "below"="#f8766d")) + 
+  labs(title= "Percent Change of High-Valued Shares") + 
+  coord_flip()
+```
+
+
+
+
+
+## Conclusion
+
+
+
+In conclusion Shreecem and Abbotindia are two shares with the most growth last year based off of the parameters set earlier. These are high valued shares that are relatively stable.
+
+
+
+
+
+
+# Data Set 2: Candy Hierarchy
+
+
+
+This candy hierarchy dataset was chosen primarily because of the tidying required, also because I love candy. The data was taken in 2017 and is from real observations. The purpose of this analysis is to find how age might effect an individual's likelihood of enjoying candy.
+
+
+
+```{r}
+raw_candy <- read.csv("https://raw.githubusercontent.com/wco1216/Data-607/master/candyhierarchy2017.csv", TRUE, ",")
+```
+
+
+
+
+
+
+
+## Data Tidying
+
+
+
+The candy was listed in individual columns so I gathered them into a singular column. Also unnecessary strings were removed from the candy column and the columns were renamed. Furthermore I filtered the candy in order to get rid of NULL responses. I selected a subset of the original dataset and spread the data using rating and n as the key value pairs respectively. 
+
+
+
+```{r, warning = FALSE}
+candy <- gather(raw_candy, "Candy","Rating",7:120)
+names(candy) <- c("ID", "Going_Out", "Gender", "Age", "Country", "State", "Candy", "Rating")
+candy$Candy <- str_remove_all(candy$Candy, "Q[:digit:]...?")
+candy <- candy 
+candy <- filter(candy, (candy$Rating == "JOY" | candy$Rating == "DESPAIR" | candy$Rating == "MEH") &
+               (candy$Gender == "Male" | candy$Gender == "Female") &
+                Age %in% (1:100)) 
+candy <- select(candy, Gender, Age, Rating)
+candy$Age <- as.numeric(as.character(candy$Age))
+
+df <- data.frame(count(candy, Age, Rating))
+df <- spread(df, Rating, n)
+df$DESPAIR <- as.numeric(as.character(df$DESPAIR))
+df$JOY <- as.numeric(as.character(df$JOY))
+```
+
+
+
+
+
+
+## Analysis
+
+
+
+The three repsones for every age were counted and mapped on a line graph. We notice the age distribution of the sample which resembles a bell shaped curve. Young individuals seemed much more willing to partake in the study than old individuals.
+
+
+
+```{r}
+ggplot(df, aes(x=Age)) + 
+  geom_line(aes(y=DESPAIR, col="Despair")) + 
+  geom_line(aes(y=JOY, col="Joy")) + 
+  geom_line(aes(y=MEH, col="MEH"))
+  labs(title="Candy Ratings According to Age") +
+  theme(panel.grid.minor = element_blank()) 
+```
+
+
+
+I changed the parameters so that we can more closly see the results. I chose the age range from 35 to 50 because it had the most area under the curve meaning more observations to analyze.
+
+
+
+```{r}
+df_zoom <- filter(df, Age > 35 & Age < 50)
+
+ggplot(df_zoom, aes(x=Age)) + 
+  geom_line(aes(y=DESPAIR, col="Despair")) + 
+  geom_line(aes(y=JOY, col="Joy")) + 
+  labs(title="Candy Ratings According to Age") +
+   geom_line(aes(y=MEH, col="MEH")) +
+  theme(panel.grid.minor = element_blank()) 
+```
+
+
+
+
+
+
+
+## Conclusion
+
+
+
+We can conclude that more often people will love or hate candy. They are less likely so feel indifferent when eating something bad for them. Aside from age 40 most individuals will report that they enjoy candy more than those who report they do not enjoy candy. 
+
+
+
+
+
+
+# Data Set 3: School Diversity
+
+
+
+This data set was chosen because it felt like a hybrid of the previous two. There was a considerable amount of tidying required, in addition this data provides some relevant incite towards current events. The purpose of this data set is to analyze the change in schools ethnicity from 1995 to 2016.
+
+
+
+```{r}
+school_raw <- read.csv("https://raw.githubusercontent.com/wco1216/Data-607/master/school_diversity.csv", TRUE, ",")
+```
+
+
+
+The data was gathered so that all different ethnicities were in one column with their proportion in another. Two different data frames were created, one for old schools (1995) and another for the new schools (2016). I filtered out any school that has a population less than 100, as any school with a low population has a higher likelihood of skewing our next computation. Next the mean of every school's ethnicity in each state was calculated.
+
+
+
+
+
+
+## Data Tidying
+
+
+
+```{r}
+school_raw <- gather(school_raw, "ethnicity", "Proportion", 7:11)
+
+old_school <- school_raw %>%
+  select(ST, d_Locale_Txt, SCHOOL_YEAR, Total, ethnicity, Proportion) %>%
+  filter(Total > 100 & SCHOOL_YEAR == "1994-1995" & ethnicity != "White")
+new_school <- school_raw %>%
+  select(ST, d_Locale_Txt, SCHOOL_YEAR, Total, ethnicity, Proportion) %>%
+  filter(Total > 100 & SCHOOL_YEAR == "2016-2017" & ethnicity != "White")
+
+os_mean <- aggregate(old_school$Proportion,list(old_school$ST),mean)
+names(os_mean) <- c("state", "percent_ethnicity")
+ns_mean <- aggregate(new_school$Proportion,list(new_school$ST),mean)
+names(ns_mean) <- c("state", "percent_ethnicity")
+```
+
+
+
+The means which were calculated for each state were plotted on a U.S. map. The darker shade of red represents higher percent ethnicity. The graph below represents the ethnicities in 1995.
+
+
+
+
+
+
+## Analysis
+
+
+
+```{r}
+library(usmap)
+library(ggplot2)
+
+plot_usmap(data = os_mean, values = "percent_ethnicity", color = "red", exclude = "ID") + 
+  scale_fill_continuous(
+    low = "white", high = "red", name = "Percent Ethnicity", label = scales::comma
+  ) + theme(legend.position = "right")
+```
+
+
+
+This same plot was done for schools in 2016.
+
+
+
+```{r}
+library(usmap)
+library(ggplot2)
+
+plot_usmap(data = ns_mean, values = "percent_ethnicity", color = "red") + 
+  scale_fill_continuous(
+    low = "white", high = "red", name = "Percent Ethnicity", label = scales::comma
+  ) + theme(legend.position = "right")
+```
+
+
+
+
+
+
+## Conclusion
+
+
+
+Since 1995 to 2016 the more ethnic states are found in the south, mainly the southwest. This may correlate with hispanic individuals immigrating from south of the United States. The change from 1995 to 2016 is minor, each state seemed to be a one shade darker in 2016 (equating to a few percents higher), however the change in each state seemed very consistent with one another.
+
+
+
+
+
